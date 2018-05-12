@@ -2,12 +2,15 @@ package de.phihag.tnbxsetupdemo;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.wifi.ScanResult;
 import android.net.wifi.SupplicantState;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
 import android.widget.Toast;
@@ -32,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
             displaySsids.add(_displaySsid(raw));
         }
 
-        ArrayAdapter ssidInputAdapter = new ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, displaySsids);
+        ArrayAdapter<String> ssidInputAdapter = new ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, displaySsids);
         Spinner ssidInput = (Spinner) findViewById(R.id.ssidInput);
         ssidInput.setAdapter(ssidInputAdapter);
 
@@ -53,17 +56,40 @@ public class MainActivity extends AppCompatActivity {
             wifiManager.setWifiEnabled(true);
         }
 
+        // Enter currently connected WLAN
         WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+        String connectedSsid = null;
         if (wifiInfo.getSupplicantState() == SupplicantState.COMPLETED) {
-            String ssid = wifiInfo.getSSID();
-            setSsids(Collections.singletonList(ssid), ssid);
+            connectedSsid = wifiInfo.getSSID();
+            List<String> ssidList = new ArrayList<>();
+            ssidList.add(ssid);
+            setSsids(ssidList, ssid);
         }
 
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
-        context.registerReceiver(wifiScanReceiver, intentFilter);
+        // Scan for more WLANs (including the Toniebox)
+        wifiScanReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                List<ScanResult> wifiScanList = wifiManager.getScanResults();
+                setSsids(wifiScanList, connectedSsid);
+            }
+        };
         wifiManager.startScan();
     }
+
+    protected void onPause() {
+        unregisterReceiver(wifiScanReceiver);
+        super.onPause();
+    }
+
+    protected void onResume() {
+        registerReceiver(
+                wifiScanReceiver,
+                new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
+        );
+        super.onResume();
+    }
+
 }
 
 // TODO scan wifi
@@ -73,3 +99,4 @@ public class MainActivity extends AppCompatActivity {
 // TODO store passwords (and predefault if we know it)
 // TODO button to scan now
 // TODO deal with connection changes (or starting without Wifi)
+// TODO scan wifi continuously
