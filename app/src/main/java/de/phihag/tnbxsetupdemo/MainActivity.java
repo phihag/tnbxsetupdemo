@@ -1,6 +1,7 @@
 package de.phihag.tnbxsetupdemo;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -35,6 +36,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+
+import de.phihag.BoxConfigurationClient;
 
 public class MainActivity extends AppCompatActivity {
     private BroadcastReceiver wifiScanReceiver;
@@ -145,6 +148,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    @SuppressLint("StaticFieldLeak")
     private void configure(SharedPreferences sharedPref, WifiManager wifiManager) {
         Spinner ssidInput = (Spinner) findViewById(R.id.ssidInput);
         String ssid = ssidInput.getSelectedItem().toString();
@@ -153,7 +157,12 @@ public class MainActivity extends AppCompatActivity {
         String password = passwordInput.getText().toString();
 
         Spinner tonieboxInput = (Spinner) findViewById(R.id.tonieboxes);
-        String tonieboxId = tonieboxInput.getSelectedItem().toString();
+        Object tonieboxIdItem = tonieboxInput.getSelectedItem();
+        if (tonieboxIdItem == null) {
+            Toast.makeText(getApplicationContext(), "Kein Toniebox ausgewählt: beide Ohren für 5s halten und 20s warten", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String tonieboxId = tonieboxIdItem.toString();
 
         // TODO test with no Toniebox ID selected, or no password, ...
 
@@ -169,15 +178,27 @@ public class MainActivity extends AppCompatActivity {
         wifiConfig.SSID = String.format("\"%s\"", "Toniebox-" + tonieboxId);
         wifiConfig.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         int netId = wifiManager.addNetwork(wifiConfig);
-        status_add("Disconnect ...");
-        wifiManager.disconnect();
         status_add("enabling WLAN ...");
         wifiManager.enableNetwork(netId, true);
         status_add("reconnecting ...");
-        wifiManager.reconnect();
 
-        status_add("removing network configuration ...");
-        wifiManager.removeNetwork(netId);
+        (new BoxConfigurationClient() {
+            @Override
+            protected void onPostExecute(Boolean result) {
+                Log.d("POST EXECUTE", String.valueOf(result));
+
+                status_add("removing Toniebox network configuration ...");
+                wifiManager.disconnect();
+                wifiManager.removeNetwork(netId);
+                wifiManager.reconnect();
+            }
+
+            @Override
+            protected void onProgressUpdate(String... progress) {
+                assert progress.length == 1;
+                status_add(progress[0]);
+            }
+        }).execute(new BoxConfigurationClient.WifiConfig(ssid, BoxConfigurationClient.TYPE_WPA2, password));
     }
 
     protected void onCreate(Bundle savedInstanceState) {
@@ -295,8 +316,6 @@ public class MainActivity extends AppCompatActivity {
 
 }
 
-// TODO actually configure the toniebox
-
 // TODO make configure button clickable once everything is present, no earlier
 // TODO show scanning icon
 // TODO button to reload scan list
@@ -308,3 +327,4 @@ public class MainActivity extends AppCompatActivity {
 // TODO keep cursor in pasword field when switching between visible / invisible
 // TODO password fields: disable autocompletion
 // TODO prevent accidental permanent connection to Toniebox
+// TODO cancel previous configuration try upon re-tocuhing it
