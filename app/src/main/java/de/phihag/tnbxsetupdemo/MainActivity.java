@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.SupplicantState;
@@ -14,9 +15,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.RequiresApi;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
+import android.text.method.PasswordTransformationMethod;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.Toast;
@@ -52,13 +55,43 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void setPasswordMode(EditText passwordInput, boolean visible) {
+        passwordInput.setTransformationMethod(visible ? null : new PasswordTransformationMethod());
+    }
+
+    private void setupPasswordVisible(SharedPreferences sharedPref) {
+        EditText passwordInput = (EditText) findViewById(R.id.passwordInput);
+        CheckBox displayPasswordCheckbox = findViewById(R.id.displayPasswordCheckbox);
+        if (sharedPref.contains("password_visible")) {
+            boolean prefVisible = sharedPref.getBoolean("password_visible", true);
+            displayPasswordCheckbox.setChecked(prefVisible);
+            setPasswordMode(passwordInput, prefVisible);
+        }
+        displayPasswordCheckbox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                setPasswordMode(passwordInput, isChecked);
+
+                // Store preferences
+                SharedPreferences.Editor editor = sharedPref.edit();
+                editor.putBoolean("password_visible", isChecked);
+                editor.commit();
+            }
+        });
+    }
+
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
         Context context = getApplicationContext();
-        WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        SharedPreferences sharedPref = context.getSharedPreferences(
+                getString(R.string.preference_file_key), Context.MODE_PRIVATE);
 
+        // Set up UI
+        setupPasswordVisible(sharedPref);
+
+        // Set up Wifi (enable if it isn't on)
+        WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         if (!wifiManager.isWifiEnabled()) {
             Toast.makeText(context, "Kein WLAN ... wird aktiviert", Toast.LENGTH_LONG).show();
             wifiManager.setWifiEnabled(true);
@@ -146,14 +179,12 @@ public class MainActivity extends AppCompatActivity {
 
 }
 
-// TODO switch between visible/invisible password
-
 // TODO store passwords (and predefault if we know it)
 // TODO actually configure the toniebox
-
 
 // TODO show scanning icon
 // TODO button to reload scan list
 // TODO deal with connection changes (or starting without Wifi)
 // TODO deduplicate SSIDs
 // TODO integrate new Wifis found to the bottom?
+// TODO test with multiple Tonieboxes, keep selection

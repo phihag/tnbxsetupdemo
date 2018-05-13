@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">TnbxSetupDemo</string>
+    <string name="preference_file_key">de.phihag.tnbxsetupdemo.prefs</string>
 </resources>
