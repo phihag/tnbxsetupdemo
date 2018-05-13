@@ -1,26 +1,35 @@
 package de.phihag.tnbxsetupdemo;
 
+import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.SupplicantState;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.support.annotation.RequiresApi;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
+import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.Toast;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class MainActivity extends AppCompatActivity {
     private BroadcastReceiver wifiScanReceiver;
+    private WLANScanRequestThread wlanScanRequestThread;
+    private boolean updatedWLANList = false;
 
     private String _displaySsid(String ssid) {
         if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
@@ -29,18 +38,17 @@ public class MainActivity extends AppCompatActivity {
         return ssid;
     }
 
-    private void setSsids(List<String> ssids, String sel) {
+    private void setSsids(Spinner spinner, List<String> ssids, String sel) {
         List<String> displaySsids = new ArrayList<String>();
         for (String raw : ssids) {
             displaySsids.add(_displaySsid(raw));
         }
 
         ArrayAdapter<String> ssidInputAdapter = new ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, displaySsids);
-        Spinner ssidInput = (Spinner) findViewById(R.id.ssidInput);
-        ssidInput.setAdapter(ssidInputAdapter);
+        spinner.setAdapter(ssidInputAdapter);
 
         if (sel != null) {
-            ssidInput.setSelection(ssids.indexOf(sel));
+            spinner.setSelection(ssids.indexOf(sel));
         }
     }
 
@@ -58,12 +66,13 @@ public class MainActivity extends AppCompatActivity {
 
         // Enter currently connected WLAN
         WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-        String connectedSsid = null;
-        if (wifiInfo.getSupplicantState() == SupplicantState.COMPLETED) {
-            connectedSsid = wifiInfo.getSSID();
+        boolean connected = wifiInfo.getSupplicantState() == SupplicantState.COMPLETED;
+        String connectedSsid = connected ? wifiInfo.getSSID() : null;
+        if (connected) {
             List<String> ssidList = new ArrayList<>();
-            ssidList.add(ssid);
-            setSsids(ssidList, ssid);
+            ssidList.add(connectedSsid);
+            Spinner ssidInput = (Spinner) findViewById(R.id.ssidInput);
+            setSsids(ssidInput, ssidList, connectedSsid);
         }
 
         // Scan for more WLANs (including the Toniebox)
@@ -71,10 +80,49 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onReceive(Context context, Intent intent) {
                 List<ScanResult> wifiScanList = wifiManager.getScanResults();
-                setSsids(wifiScanList, connectedSsid);
+                if (wifiScanList.size() == 0) {
+                    // Nothing found, do not change
+                    return;
+                }
+                List<String> ssids = new ArrayList<>();
+                for (ScanResult sr : wifiScanList) {
+                    ssids.add(sr.SSID);
+                }
+
+                // Update list of available access points
+                if (!updatedWLANList) {
+                    Spinner ssidInput = (Spinner) findViewById(R.id.ssidInput);
+                    setSsids(ssidInput, ssids, connectedSsid);
+                    updatedWLANList = true;
+                }
+
+                // Update list of Tonieboxes
+                Spinner tonieboxes = (Spinner) findViewById(R.id.tonieboxes);
+                List<String> tonieboxIDs = new ArrayList<>();
+                for (ScanResult sr : wifiScanList) {
+                    final String SSID_PREFIX = "Toniebox-";
+                    if (sr.SSID.startsWith(SSID_PREFIX)) {
+                        tonieboxIDs.add(sr.SSID.substring(SSID_PREFIX.length()));
+                    }
+                }
+                setSsids(tonieboxes, tonieboxIDs, null);
             }
         };
-        wifiManager.startScan();
+        wlanScanRequestThread = new WLANScanRequestThread(wifiManager);
+        wlanScanRequestThread.resumeScanning();
+
+        // Focus password field
+        // TODO only if we don't know the password
+        TimerTask tt = new TimerTask() {
+            @Override
+            public void run() {
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                EditText passwordInput = (EditText) findViewById(R.id.passwordInput);
+                imm.showSoftInput(passwordInput, InputMethodManager.SHOW_IMPLICIT);
+            }
+        };
+        final Timer timer = new Timer();
+        timer.schedule(tt, 300);
     }
 
     protected void onPause() {
@@ -82,21 +130,30 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.M)
     protected void onResume() {
         registerReceiver(
                 wifiScanReceiver,
                 new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
         );
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 87);
+            }
+        }
         super.onResume();
     }
 
 }
 
-// TODO scan wifi
-// TODO actually configure
-// TODO show scanning icon
 // TODO switch between visible/invisible password
+
 // TODO store passwords (and predefault if we know it)
-// TODO button to scan now
+// TODO actually configure the toniebox
+
+
+// TODO show scanning icon
+// TODO button to reload scan list
 // TODO deal with connection changes (or starting without Wifi)
-// TODO scan wifi continuously
+// TODO deduplicate SSIDs
+// TODO integrate new Wifis found to the bottom?
