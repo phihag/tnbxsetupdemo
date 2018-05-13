@@ -35,7 +35,7 @@ public abstract class BoxConfigurationClient extends AsyncTask<BoxConfigurationC
 
     private final int CONNECT_TIMEOUT = 2500;
     private final int READ_TIMEOUT = 20000;
-    private final int RETRY_TIME = 1000;
+    private final int RETRY_TIME = 2000;
     private final int TRY_COUNT = 10;
 
     private String craftPostData(WifiConfig wc) {
@@ -87,8 +87,9 @@ public abstract class BoxConfigurationClient extends AsyncTask<BoxConfigurationC
         for (int tries = 0;tries < TRY_COUNT;tries++) {
             try {
                 Thread.sleep(RETRY_TIME);
-            } catch (InterruptedException e1) {
+            } catch (InterruptedException ie) {
                 // Ignore, just retry immediately
+                ie.printStackTrace();
             }
 
             try {
