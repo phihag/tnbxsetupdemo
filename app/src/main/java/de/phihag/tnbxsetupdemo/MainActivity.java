@@ -324,7 +324,7 @@ public class MainActivity extends AppCompatActivity {
 // TODO integrate new Wifis found to the bottom?
 // TODO block UI when connecting to Toniebox
 // TODO test with multiple Tonieboxes, keep selection
-// TODO keep cursor in pasword field when switching between visible / invisible
+// TODO keep cursor in password field when switching between visible / invisible
 // TODO password fields: disable autocompletion
 // TODO prevent accidental permanent connection to Toniebox
 // TODO cancel previous configuration try upon re-tocuhing it
