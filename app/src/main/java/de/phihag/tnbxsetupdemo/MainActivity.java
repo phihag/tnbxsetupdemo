@@ -9,6 +9,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.SupplicantState;
+import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
@@ -26,10 +27,10 @@ import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Timer;
@@ -39,6 +40,17 @@ public class MainActivity extends AppCompatActivity {
     private BroadcastReceiver wifiScanReceiver;
     private WLANScanRequestThread wlanScanRequestThread;
     private boolean updatedWLANList = false;
+
+    private String totalStatus = "";
+    private void status_set(String contents) {
+        this.totalStatus = contents;
+        TextView logOutput = (TextView) findViewById(R.id.log);
+        logOutput.setText(contents);
+    }
+
+    private void status_add(String line) {
+        status_set(totalStatus + line + "\n");
+    }
 
     private String _displaySsid(String ssid) {
         if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
@@ -57,12 +69,11 @@ public class MainActivity extends AppCompatActivity {
         spinner.setAdapter(ssidInputAdapter);
 
         if (sel != null) {
-            spinner.setSelection(ssids.indexOf(sel));
+            spinner.setSelection(displaySsids.indexOf(_displaySsid(sel)));
         }
     }
 
     private void storePassword(SharedPreferences sharedPref, String ssid, String password) {
-        Log.d("apssword", "storing ssid = " + ssid + "; password = " + password);
         if (password.length() == 0) return;
 
         String password_b64 = null;
@@ -134,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void configure(SharedPreferences sharedPref) {
+    private void configure(SharedPreferences sharedPref, WifiManager wifiManager) {
         Spinner ssidInput = (Spinner) findViewById(R.id.ssidInput);
         String ssid = ssidInput.getSelectedItem().toString();
 
@@ -152,8 +163,21 @@ public class MainActivity extends AppCompatActivity {
             storePassword(sharedPref, ssid, password);
         }
 
-        // TODO actually connect
+        // Connect to the Toniebox
+        status_set("Verbinde zur Toniebox ...\n");
+        WifiConfiguration wifiConfig = new WifiConfiguration();
+        wifiConfig.SSID = String.format("\"%s\"", "Toniebox-" + tonieboxId);
+        wifiConfig.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+        int netId = wifiManager.addNetwork(wifiConfig);
+        status_add("Disconnect ...");
+        wifiManager.disconnect();
+        status_add("enabling WLAN ...");
+        wifiManager.enableNetwork(netId, true);
+        status_add("reconnecting ...");
+        wifiManager.reconnect();
 
+        status_add("removing network configuration ...");
+        wifiManager.removeNetwork(netId);
     }
 
     protected void onCreate(Bundle savedInstanceState) {
@@ -162,6 +186,7 @@ public class MainActivity extends AppCompatActivity {
         Context context = getApplicationContext();
         SharedPreferences sharedPref = context.getSharedPreferences(
                 getString(R.string.preference_file_key), Context.MODE_PRIVATE);
+        WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         EditText passwordInput = (EditText) findViewById(R.id.passwordInput);
 
         // Set up UI
@@ -172,12 +197,11 @@ public class MainActivity extends AppCompatActivity {
         configureButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                configure(sharedPref);
+                configure(sharedPref, wifiManager);
             }
         });
 
         // Set up Wifi (enable if it isn't on)
-        WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         if (!wifiManager.isWifiEnabled()) {
             Toast.makeText(context, "Kein WLAN ... wird aktiviert", Toast.LENGTH_LONG).show();
             wifiManager.setWifiEnabled(true);
@@ -187,6 +211,7 @@ public class MainActivity extends AppCompatActivity {
         WifiInfo wifiInfo = wifiManager.getConnectionInfo();
         boolean connected = wifiInfo.getSupplicantState() == SupplicantState.COMPLETED;
         String connectedSsid = connected ? wifiInfo.getSSID() : null;
+        boolean addedPassword = false;
         if (connected) {
             List<String> ssidList = new ArrayList<>();
             ssidList.add(connectedSsid);
@@ -195,6 +220,7 @@ public class MainActivity extends AppCompatActivity {
             String stored = loadPassword(sharedPref, connectedSsid);
             if ((stored != null) && (passwordInput.getText().toString().length() == 0)) {
                 passwordInput.setText(stored);
+                addedPassword = true;
             }
         }
 
@@ -235,16 +261,17 @@ public class MainActivity extends AppCompatActivity {
         wlanScanRequestThread.resumeScanning();
 
         // Focus password field
-        // TODO only if we don't know the password
-        TimerTask tt = new TimerTask() {
-            @Override
-            public void run() {
-                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                imm.showSoftInput(passwordInput, InputMethodManager.SHOW_IMPLICIT);
-            }
-        };
-        final Timer timer = new Timer();
-        timer.schedule(tt, 300);
+        if (!addedPassword) {
+            TimerTask tt = new TimerTask() {
+                @Override
+                public void run() {
+                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    imm.showSoftInput(passwordInput, InputMethodManager.SHOW_IMPLICIT);
+                }
+            };
+            final Timer timer = new Timer();
+            timer.schedule(tt, 300);
+        }
     }
 
     protected void onPause() {
@@ -268,12 +295,9 @@ public class MainActivity extends AppCompatActivity {
 
 }
 
-// TODO load passwords
-
-// TODO make configure button clickable once everything is present, no earlier
 // TODO actually configure the toniebox
 
-
+// TODO make configure button clickable once everything is present, no earlier
 // TODO show scanning icon
 // TODO button to reload scan list
 // TODO deal with connection changes (or starting without Wifi)
@@ -283,3 +307,4 @@ public class MainActivity extends AppCompatActivity {
 // TODO test with multiple Tonieboxes, keep selection
 // TODO keep cursor in pasword field when switching between visible / invisible
 // TODO password fields: disable autocompletion
+// TODO prevent accidental permanent connection to Toniebox

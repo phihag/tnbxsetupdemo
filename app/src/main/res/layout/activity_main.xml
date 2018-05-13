@@ -107,6 +107,11 @@
             app:layout_constraintStart_toStartOf="parent"
             tools:layout_editor_absoluteY="359dp" />
 
+        <TextView
+            android:id="@+id/log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
     </LinearLayout>
 
 </android.support.constraint.ConstraintLayout>
