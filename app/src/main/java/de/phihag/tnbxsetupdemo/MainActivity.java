@@ -16,14 +16,20 @@ import android.os.Bundle;
 import android.support.annotation.RequiresApi;
 import android.support.v7.app.AppCompatActivity;
 import android.text.method.PasswordTransformationMethod;
+import android.util.Base64;
+import android.util.Log;
+import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.Toast;
 
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Timer;
@@ -55,6 +61,38 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void storePassword(SharedPreferences sharedPref, String ssid, String password) {
+        Log.d("apssword", "storing ssid = " + ssid + "; password = " + password);
+        if (password.length() == 0) return;
+
+        String password_b64 = null;
+        try {
+            password_b64 = Base64.encodeToString(password.getBytes("UTF-8"), Base64.DEFAULT);
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }
+
+        SharedPreferences.Editor editor = sharedPref.edit();
+        String key = "wlan_password_b64_" + _displaySsid(ssid);
+        editor.putString(key, password_b64);
+        editor.commit();
+    }
+
+    private String loadPassword(SharedPreferences sharedPref, String ssid) {
+        String key = "wlan_password_b64_" + _displaySsid(ssid);
+        String b64 = sharedPref.getString(key, null);
+        if (b64 == null) return null;
+
+        String password = null;
+        try {
+            password = new String(Base64.decode(b64, Base64.DEFAULT), "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }
+
+        return password;
+    }
+
     private void setPasswordMode(EditText passwordInput, boolean visible) {
         passwordInput.setTransformationMethod(visible ? null : new PasswordTransformationMethod());
     }
@@ -80,15 +118,63 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void setupStorePassword(SharedPreferences sharedPref) {
+        CheckBox storePasswordCheckbox = findViewById(R.id.storePasswordCheckbox);
+        if (sharedPref.contains("store_password")) {
+            storePasswordCheckbox.setChecked(sharedPref.getBoolean("store_password", true));
+        }
+        storePasswordCheckbox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                // Store preferences
+                SharedPreferences.Editor editor = sharedPref.edit();
+                editor.putBoolean("store_password", isChecked);
+                editor.commit();
+            }
+        });
+    }
+
+    private void configure(SharedPreferences sharedPref) {
+        Spinner ssidInput = (Spinner) findViewById(R.id.ssidInput);
+        String ssid = ssidInput.getSelectedItem().toString();
+
+        EditText passwordInput = (EditText) findViewById(R.id.passwordInput);
+        String password = passwordInput.getText().toString();
+
+        Spinner tonieboxInput = (Spinner) findViewById(R.id.tonieboxes);
+        String tonieboxId = tonieboxInput.getSelectedItem().toString();
+
+        // TODO test with no Toniebox ID selected, or no password, ...
+
+        // Save password
+        CheckBox storePasswordCheckbox = (CheckBox) findViewById(R.id.storePasswordCheckbox);
+        if (storePasswordCheckbox.isChecked()) {
+            storePassword(sharedPref, ssid, password);
+        }
+
+        // TODO actually connect
+
+    }
+
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Context context = getApplicationContext();
         SharedPreferences sharedPref = context.getSharedPreferences(
                 getString(R.string.preference_file_key), Context.MODE_PRIVATE);
+        EditText passwordInput = (EditText) findViewById(R.id.passwordInput);
 
         // Set up UI
         setupPasswordVisible(sharedPref);
+        setupStorePassword(sharedPref);
+
+        Button configureButton = (Button) findViewById(R.id.configureBtn);
+        configureButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                configure(sharedPref);
+            }
+        });
 
         // Set up Wifi (enable if it isn't on)
         WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
@@ -106,6 +192,10 @@ public class MainActivity extends AppCompatActivity {
             ssidList.add(connectedSsid);
             Spinner ssidInput = (Spinner) findViewById(R.id.ssidInput);
             setSsids(ssidInput, ssidList, connectedSsid);
+            String stored = loadPassword(sharedPref, connectedSsid);
+            if ((stored != null) && (passwordInput.getText().toString().length() == 0)) {
+                passwordInput.setText(stored);
+            }
         }
 
         // Scan for more WLANs (including the Toniebox)
@@ -150,7 +240,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                EditText passwordInput = (EditText) findViewById(R.id.passwordInput);
                 imm.showSoftInput(passwordInput, InputMethodManager.SHOW_IMPLICIT);
             }
         };
@@ -179,12 +268,18 @@ public class MainActivity extends AppCompatActivity {
 
 }
 
-// TODO store passwords (and predefault if we know it)
+// TODO load passwords
+
+// TODO make configure button clickable once everything is present, no earlier
 // TODO actually configure the toniebox
+
 
 // TODO show scanning icon
 // TODO button to reload scan list
 // TODO deal with connection changes (or starting without Wifi)
 // TODO deduplicate SSIDs
 // TODO integrate new Wifis found to the bottom?
+// TODO block UI when connecting to Toniebox
 // TODO test with multiple Tonieboxes, keep selection
+// TODO keep cursor in pasword field when switching between visible / invisible
+// TODO password fields: disable autocompletion

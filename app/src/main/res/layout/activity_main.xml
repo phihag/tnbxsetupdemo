@@ -64,7 +64,7 @@
                 android:text="Anzeigen" />
 
             <CheckBox
-                android:id="@+id/checkBox"
+                android:id="@+id/storePasswordCheckbox"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -94,7 +94,7 @@
             android:layout_height="wrap_content" />
 
         <Button
-            android:id="@+id/button"
+            android:id="@+id/configureBtn"
             android:layout_width="349dp"
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
