@@ -17,6 +17,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.RequiresApi;
 import android.support.v7.app.AppCompatActivity;
+import android.text.InputType;
 import android.text.method.PasswordTransformationMethod;
 import android.util.Base64;
 import android.util.Log;
@@ -109,6 +110,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void setPasswordMode(EditText passwordInput, boolean visible) {
         passwordInput.setTransformationMethod(visible ? null : new PasswordTransformationMethod());
+        passwordInput.setInputType(visible ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD : InputType.TYPE_TEXT_VARIATION_PASSWORD);
     }
 
     private void setupPasswordVisible(SharedPreferences sharedPref) {
@@ -185,8 +187,6 @@ public class MainActivity extends AppCompatActivity {
         (new BoxConfigurationClient() {
             @Override
             protected void onPostExecute(Boolean result) {
-                Log.d("POST EXECUTE", String.valueOf(result));
-
                 status_add("removing Toniebox network configuration ...");
                 wifiManager.disconnect();
                 wifiManager.removeNetwork(netId);
